@@ -10,27 +10,29 @@ function isVercel(): boolean {
 }
 
 /**
- * Upload a file. Returns a unique file identifier.
- * - On Vercel: returns the blob URL
- * - On local: returns a unique filename (with nanoid prefix)
+ * Upload a file. Returns { fileId, storageUrl }.
+ * - fileId: a short unique ID used in the Sheet and download URLs
+ * - storageUrl: the actual storage path (blob URL on Vercel, local path on dev)
  */
 export async function uploadFile(
   storageName: string,
   buffer: Buffer,
   mimeType: string
-): Promise<string> {
+): Promise<{ fileId: string; storageUrl: string }> {
   // Sanitize: prevent path traversal
   if (storageName.includes("..")) {
     throw new Error("Invalid filename");
   }
 
   if (isVercel()) {
-    const blob = await put(storageName, buffer, {
+    const localId = nanoid(12);
+    const blobName = `${localId}-${storageName}`;
+    const blob = await put(blobName, buffer, {
       access: "public",
       contentType: mimeType,
-      addRandomSuffix: true,
+      addRandomSuffix: false,
     });
-    return blob.url;
+    return { fileId: localId, storageUrl: blob.url };
   }
 
   // Local dev: store on disk
@@ -42,40 +44,39 @@ export async function uploadFile(
     await mkdir(path.join(UPLOADS_DIR, dir), { recursive: true });
   }
 
+  const localId = nanoid(12);
   const uniqueName = dir !== "."
-    ? path.join(dir, `${nanoid(12)}-${path.basename(storageName)}`)
-    : `${nanoid(12)}-${storageName}`;
+    ? path.join(dir, `${localId}-${path.basename(storageName)}`)
+    : `${localId}-${storageName}`;
 
   const filePath = path.join(UPLOADS_DIR, uniqueName);
   await writeFile(filePath, buffer);
-  return uniqueName;
+  return { fileId: localId, storageUrl: uniqueName };
 }
 
 /**
- * Download a file by its identifier.
- * - On Vercel: fileId is a blob URL, fetches it
- * - On local: fileId is a relative path in uploads/
+ * Download a file by its storage URL.
  */
-export async function downloadFile(fileId: string): Promise<Buffer> {
-  if (isVercel() || fileId.startsWith("http")) {
-    const res = await fetch(fileId);
+export async function downloadFile(storageUrl: string): Promise<Buffer> {
+  if (isVercel() || storageUrl.startsWith("http")) {
+    const res = await fetch(storageUrl);
     if (!res.ok) throw new Error("File not found");
     return Buffer.from(await res.arrayBuffer());
   }
 
   // Local dev: read from disk
-  const filePath = path.join(UPLOADS_DIR, fileId);
+  const filePath = path.join(UPLOADS_DIR, storageUrl);
   return readFile(filePath);
 }
 
-export async function deleteFile(fileId: string) {
+export async function deleteFile(storageUrl: string) {
   if (isVercel()) {
-    await del(fileId);
+    await del(storageUrl);
     return;
   }
 
   // Local dev: delete from disk
-  const filePath = path.join(UPLOADS_DIR, fileId);
+  const filePath = path.join(UPLOADS_DIR, storageUrl);
   await unlink(filePath).catch((err) => console.error("Failed to delete file:", filePath, err));
 }
 

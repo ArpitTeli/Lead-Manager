@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Tab = "upload" | "stats" | "users";
+type Tab = "upload" | "files" | "stats" | "users";
 
 export default function AdminClient() {
   const [tab, setTab] = useState<Tab>("upload");
@@ -10,7 +10,7 @@ export default function AdminClient() {
   return (
     <div>
       <div className="mb-6 flex gap-2">
-        {(["upload", "stats", "users"] as Tab[]).map((t) => (
+        {(["upload", "files", "stats", "users"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -26,6 +26,7 @@ export default function AdminClient() {
       </div>
 
       {tab === "upload" && <UploadPanel />}
+      {tab === "files" && <FilesPanel />}
       {tab === "stats" && <StatsPanel />}
       {tab === "users" && <UsersPanel />}
     </div>
@@ -223,6 +224,88 @@ function StatsPanel() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function FilesPanel() {
+  const [files, setFiles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  function loadFiles() {
+    setLoading(true);
+    fetch("/api/files")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) setError(data.error);
+        else setFiles(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => { setError("Failed to load files"); setLoading(false); });
+  }
+
+  useEffect(() => { loadFiles(); }, []);
+
+  if (loading) return <p className="text-sm text-black/50">Loading...</p>;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+
+  return (
+    <div className="rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-ink">All Files</h3>
+        <button
+          onClick={loadFiles}
+          className="rounded-md border border-black/15 px-3 py-1 text-xs hover:bg-black/5"
+        >
+          Refresh
+        </button>
+      </div>
+      {files.length === 0 ? (
+        <p className="text-sm text-black/50">No files uploaded yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-black/10 text-black/50">
+                <th className="py-2 pr-2 font-medium">Filename</th>
+                <th className="py-2 pr-2 font-medium">Folder</th>
+                <th className="py-2 pr-2 font-medium">Status</th>
+                <th className="py-2 pr-2 font-medium">Uploaded</th>
+                <th className="py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.map((f: any) => (
+                <tr key={f.fileId} className="border-b border-black/5">
+                  <td className="py-2 pr-2 max-w-[200px] truncate">{f.filename}</td>
+                  <td className="py-2 pr-2 text-xs text-black/50">{f.folderPath || "—"}</td>
+                  <td className="py-2 pr-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      f.status === "Queue" ? "bg-yellow-100 text-yellow-800" :
+                      f.status === "Assigned" ? "bg-blue-100 text-blue-800" :
+                      "bg-green-100 text-green-800"
+                    }`}>
+                      {f.status}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-2 text-xs text-black/50">
+                    {new Date(f.uploadedAt).toLocaleDateString()}
+                  </td>
+                  <td className="py-2">
+                    <a
+                      href={`/api/download/${f.fileId}`}
+                      className="rounded-md border border-black/15 px-2.5 py-1 text-xs hover:bg-black/5"
+                    >
+                      Download
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ export interface LeadFile {
   fileId: string;
   filename: string;
   folderPath: string;
+  storageUrl: string;
   status: FileStatus;
   assignedTo: string;
   uploadedAt: string;

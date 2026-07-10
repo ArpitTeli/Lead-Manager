@@ -20,13 +20,8 @@ export async function GET(
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 
-  // LQs may only download files currently assigned to them; Admins may download any.
-  if (session.role !== "Admin" && file.assignedTo !== session.userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   try {
-    const buffer = await downloadFile(fileId);
+    const buffer = await downloadFile(file.storageUrl);
     await logActivity(session.userId, "DOWNLOADED", `File ${file.filename} (${fileId})`);
 
     return new NextResponse(buffer, {

@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
         await ensureFolder(folderPath);
       }
 
-      const fileId = await uploadFile(
+      const { fileId, storageUrl } = await uploadFile(
         storageName,
         buffer,
         file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
         fileId,
         filename: file.name,
         folderPath,
+        storageUrl,
         status: "Queue",
         assignedTo: "",
         uploadedAt: now,
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
         filename: file.name,
         folderPath,
         fileId,
+        storageUrl,
         status: "Queue",
       });
     }
