@@ -250,21 +250,57 @@ function StatsPanel() {
 function FilesPanel() {
   const [files, setFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
+  const [syncMsg, setSyncMsg] = useState("");
 
-  function loadFiles() {
+  async function loadFiles() {
     setLoading(true);
-    fetch("/api/files")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) setError(data.error);
-        else setFiles(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => { setError("Failed to load files"); setLoading(false); });
+    setError("");
+    try {
+      const res = await fetch("/api/files");
+      const data = await res.json();
+      if (data.error) setError(data.error);
+      else setFiles(Array.isArray(data) ? data : []);
+    } catch {
+      setError("Failed to load files");
+    }
+    setLoading(false);
   }
 
-  useEffect(() => { loadFiles(); }, []);
+  async function syncBlobs() {
+    setSyncing(true);
+    setSyncMsg("");
+    setError("");
+    try {
+      const res = await fetch("/api/sync-blobs", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Sync failed");
+      } else {
+        if (data.synced > 0) {
+          setSyncMsg(`Synced ${data.synced} new file(s) from Blob storage`);
+        } else {
+          setSyncMsg("✓ Blob storage is in sync");
+        }
+        // Reload the file list to show newly synced files
+        await loadFiles();
+      }
+    } catch {
+      setError("Sync failed — check console");
+    }
+    setSyncing(false);
+  }
+
+  // Auto-sync on mount, then load files
+  useEffect(() => {
+    (async () => {
+      try {
+        await fetch("/api/sync-blobs", { method: "POST" });
+      } catch { /* silent — sync will run again on manual click */ }
+      loadFiles();
+    })();
+  }, []);
 
   async function handleDelete(fileId: string, filename: string) {
     if (!window.confirm(`Delete "${filename}"? This cannot be undone.`)) return;
@@ -288,13 +324,25 @@ function FilesPanel() {
     <div className="rounded-xl border border-black/10 bg-white p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-ink">All Files</h3>
-        <button
-          onClick={loadFiles}
-          className="rounded-md border border-black/15 px-3 py-1 text-xs hover:bg-black/5"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={syncBlobs}
+            disabled={syncing}
+            className="rounded-md border border-black/15 px-3 py-1 text-xs hover:bg-black/5 disabled:opacity-50"
+          >
+            {syncing ? "Syncing..." : "Sync Blobs"}
+          </button>
+          <button
+            onClick={loadFiles}
+            className="rounded-md border border-black/15 px-3 py-1 text-xs hover:bg-black/5"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
+      {syncMsg && (
+        <p className="mb-3 text-xs text-green-600">{syncMsg}</p>
+      )}
       <FileTree files={files} onDelete={handleDelete} />
     </div>
   );
