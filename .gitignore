@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build
+.next/
+tsconfig.tsbuildinfo
+
+# Environment & secrets
+.env.local
+.env.*.local
+
+# Google service account key
+strata-501110-30e77262c7bb.json
+
+# Sheet / Drive IDs (plaintext secrets)
+GSheets sheet ID.txt
+gdrive folder ID.txt
+drive-folder-id.txt
+sheet-id.txt
+
+# OS
+.DS_Store
+Thumbs.db
