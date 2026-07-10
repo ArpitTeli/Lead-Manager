@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import FileTree from "@/components/FileTree";
 
 type Tab = "upload" | "files" | "stats" | "users";
 
@@ -39,6 +40,7 @@ function UploadPanel() {
   const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"files" | "folder">("files");
+  const [targetFolder, setTargetFolder] = useState("");
 
   async function handleUpload() {
     if (!files || files.length === 0) return;
@@ -48,6 +50,9 @@ function UploadPanel() {
     try {
       const formData = new FormData();
       Array.from(files).forEach((f) => formData.append("files", f));
+      if (targetFolder) {
+        formData.append("targetFolder", targetFolder);
+      }
       const res = await fetch("/api/admin/upload", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {
@@ -71,6 +76,20 @@ function UploadPanel() {
       <p className="mb-6 text-sm text-black/50">
         Upload Excel files individually or select an entire folder to preserve its structure.
       </p>
+
+      {/* Target folder input */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-black/50 mb-1">
+          Upload to folder (optional — leave blank for root)
+        </label>
+        <input
+          type="text"
+          value={targetFolder}
+          onChange={(e) => setTargetFolder(e.target.value)}
+          placeholder="e.g. Region A/City 1"
+          className="w-full rounded-md border border-black/15 px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+      </div>
 
       {/* Mode toggle */}
       <div className="mb-4 flex gap-2">
@@ -276,57 +295,7 @@ function FilesPanel() {
           Refresh
         </button>
       </div>
-      {files.length === 0 ? (
-        <p className="text-sm text-black/50">No files uploaded yet.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-black/10 text-black/50">
-                <th className="py-2 pr-2 font-medium">Filename</th>
-                <th className="py-2 pr-2 font-medium">Folder</th>
-                <th className="py-2 pr-2 font-medium">Status</th>
-                <th className="py-2 pr-2 font-medium">Uploaded</th>
-                <th className="py-2 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((f: any) => (
-                <tr key={f.fileId} className="border-b border-black/5">
-                  <td className="py-2 pr-2 max-w-[200px] truncate">{f.filename}</td>
-                  <td className="py-2 pr-2 text-xs text-black/50">{f.folderPath || "—"}</td>
-                  <td className="py-2 pr-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      f.status === "Queue" ? "bg-yellow-100 text-yellow-800" :
-                      f.status === "Assigned" ? "bg-blue-100 text-blue-800" :
-                      "bg-green-100 text-green-800"
-                    }`}>
-                      {f.status}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-2 text-xs text-black/50">
-                    {new Date(f.uploadedAt).toLocaleDateString()}
-                  </td>
-                  <td className="py-2 flex gap-1.5">
-                    <a
-                      href={`/api/download/${f.fileId}`}
-                      className="rounded-md border border-black/15 px-2.5 py-1 text-xs hover:bg-black/5"
-                    >
-                      Download
-                    </a>
-                    <button
-                      onClick={() => handleDelete(f.fileId, f.filename)}
-                      className="rounded-md border border-red-200 px-2.5 py-1 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <FileTree files={files} onDelete={handleDelete} />
     </div>
   );
 }

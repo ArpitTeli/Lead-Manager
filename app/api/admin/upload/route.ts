@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const files = formData.getAll("files") as File[];
+    const targetFolder = (formData.get("targetFolder") as string || "").trim();
 
     if (!files || files.length === 0) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      // Determine folder path from webkitRelativePath (folder upload)
+      // Determine folder path from webkitRelativePath (folder upload) + targetFolder
       const relativePath = (file as any).webkitRelativePath || "";
       const pathParts = relativePath.split("/");
       // pathParts = ["topFolder", "subfolder", ..., "file.xlsx"]
@@ -45,10 +46,14 @@ export async function POST(req: NextRequest) {
       let storageName = file.name;
 
       if (pathParts.length > 1) {
-        // Extract the folder path (everything except the filename)
-        folderPath = pathParts.slice(0, -1).join("/");
-        // Use the full relative path to preserve folder structure in storage
-        storageName = relativePath;
+        // Folder upload: extract path from webkitRelativePath
+        const subPath = pathParts.slice(0, -1).join("/");
+        folderPath = targetFolder ? `${targetFolder}/${subPath}` : subPath;
+        storageName = targetFolder ? `${targetFolder}/${relativePath}` : relativePath;
+      } else if (targetFolder) {
+        // Single file upload with target folder
+        folderPath = targetFolder;
+        storageName = `${targetFolder}/${file.name}`;
       }
 
       // Ensure local folder exists (no-op on Vercel Blob)
