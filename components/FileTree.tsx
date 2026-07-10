@@ -28,7 +28,23 @@ function buildTree(files: FileItem[]): TreeNode[] {
   const map = new Map<string, TreeNode>();
 
   for (const f of files) {
-    if (!f.folderPath) {
+    // Determine folder path: prefer folderPath, fall back to extracting from filename
+    let folderPath = f.folderPath;
+    let cleanFilename = f.filename;
+
+    if (!folderPath) {
+      // Check if filename contains embedded path (e.g. "Mumbai/Dermat/file.xlsx")
+      const lastSlash = f.filename.lastIndexOf("/");
+      if (lastSlash > 0) {
+        folderPath = f.filename.substring(0, lastSlash);
+        cleanFilename = f.filename.substring(lastSlash + 1);
+      }
+    }
+
+    // Update file reference with cleaned filename
+    (f as any)._cleanName = cleanFilename;
+
+    if (!folderPath) {
       // No folder - add directly to root
       let node = map.get("__root__");
       if (!node) {
@@ -40,7 +56,7 @@ function buildTree(files: FileItem[]): TreeNode[] {
       continue;
     }
 
-    const parts = f.folderPath.split("/");
+    const parts = folderPath.split("/");
     let currentPath = "";
 
     for (let i = 0; i < parts.length; i++) {
@@ -135,7 +151,7 @@ export default function FileTree({ files, onDelete }: Props) {
         style={{ paddingLeft: `${12 + paddingLeft}px` }}
       >
         <span className="text-sm">📄</span>
-        <span className="flex-1 truncate text-sm text-ink">{f.filename}</span>
+        <span className="flex-1 truncate text-sm text-ink">{(f as any)._cleanName || f.filename}</span>
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
             f.status === "Queue"
