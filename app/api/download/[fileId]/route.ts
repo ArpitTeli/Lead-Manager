@@ -21,7 +21,9 @@ export async function GET(
   }
 
   try {
-    const buffer = await downloadFile(file.storageUrl);
+    // storageUrl may be empty for files uploaded before the column was added
+    const storageUrl = file.storageUrl || file.fileId;
+    const buffer = await downloadFile(storageUrl);
     await logActivity(session.userId, "DOWNLOADED", `File ${file.filename} (${fileId})`);
 
     return new NextResponse(buffer, {
