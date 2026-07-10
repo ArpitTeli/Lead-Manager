@@ -5,6 +5,7 @@ import { useState } from "react";
 interface FileInfo {
   fileId: string;
   filename: string;
+  folderPath: string;
   status: string;
   assignedAt: string;
 }
@@ -79,6 +80,11 @@ export default function DashboardClient() {
         <div className="space-y-4">
           <div className="rounded-md border border-black/10 bg-paper p-4">
             <p className="text-sm font-medium text-ink">{file.filename}</p>
+            {file.folderPath && (
+              <p className="mt-0.5 text-xs text-black/40">
+                Folder: {file.folderPath}
+              </p>
+            )}
             <p className="mt-1 text-xs text-black/50">Status: {file.status}</p>
           </div>
           <div className="flex gap-3">

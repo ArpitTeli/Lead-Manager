@@ -5,6 +5,7 @@ const TAB = "Files";
 const HEADERS = [
   "FileID",
   "Filename",
+  "FolderPath",
   "Status",
   "AssignedTo",
   "UploadedAt",
@@ -16,6 +17,7 @@ function rowToFile(row: Record<string, any>): LeadFile & { _row: number } {
   return {
     fileId: row.FileID,
     filename: row.Filename,
+    folderPath: row.FolderPath || "",
     status: row.Status as FileStatus,
     assignedTo: row.AssignedTo,
     uploadedAt: row.UploadedAt,
@@ -39,6 +41,7 @@ export async function createFile(file: LeadFile) {
   await appendRow(TAB, HEADERS, {
     FileID: file.fileId,
     Filename: file.filename,
+    FolderPath: file.folderPath,
     Status: file.status,
     AssignedTo: file.assignedTo,
     UploadedAt: file.uploadedAt,
@@ -54,6 +57,7 @@ export async function updateFile(fileId: string, patch: Partial<LeadFile>) {
   await updateRow(TAB, (file as any)._row, HEADERS, {
     FileID: merged.fileId,
     Filename: merged.filename,
+    FolderPath: merged.folderPath,
     Status: merged.status,
     AssignedTo: merged.assignedTo,
     UploadedAt: merged.uploadedAt,

@@ -37,6 +37,7 @@ function UploadPanel() {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState<"files" | "folder">("files");
 
   async function handleUpload() {
     if (!files || files.length === 0) return;
@@ -61,20 +62,77 @@ function UploadPanel() {
     }
   }
 
+  const fileList = files ? Array.from(files) : [];
+
   return (
     <div className="rounded-xl border border-black/10 bg-white p-8 shadow-sm">
       <h2 className="mb-1 text-lg font-semibold text-ink">Upload Lead Sheets</h2>
       <p className="mb-6 text-sm text-black/50">
-        Upload one or more Excel files. They'll be added to the queue automatically.
+        Upload Excel files individually or select an entire folder to preserve its structure.
       </p>
 
-      <input
-        type="file"
-        accept=".xlsx,.xls"
-        multiple
-        onChange={(e) => setFiles(e.target.files)}
-        className="mb-4 block text-sm"
-      />
+      {/* Mode toggle */}
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => { setMode("files"); setFiles(null); }}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+            mode === "files"
+              ? "bg-ink text-white"
+              : "border border-black/15 text-black/70 hover:bg-black/5"
+          }`}
+        >
+          Select Files
+        </button>
+        <button
+          onClick={() => { setMode("folder"); setFiles(null); }}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+            mode === "folder"
+              ? "bg-ink text-white"
+              : "border border-black/15 text-black/70 hover:bg-black/5"
+          }`}
+        >
+          Select Folder
+        </button>
+      </div>
+
+      {/* File / Folder picker */}
+      {mode === "files" ? (
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          multiple
+          onChange={(e) => setFiles(e.target.files)}
+          className="mb-4 block text-sm"
+        />
+      ) : (
+        <input
+          type="file"
+          // @ts-ignore -- webkitdirectory is a non-standard attribute for folder selection
+          webkitdirectory=""
+          directory=""
+          onChange={(e) => setFiles(e.target.files)}
+          className="mb-4 block text-sm"
+        />
+      )}
+
+      {/* Selected file summary */}
+      {fileList.length > 0 && (
+        <details className="mb-4">
+          <summary className="cursor-pointer text-xs text-black/60 hover:text-black/80">
+            {fileList.length} file(s) selected
+          </summary>
+          <ul className="mt-2 max-h-40 space-y-0.5 overflow-y-auto text-xs text-black/50">
+            {fileList.slice(0, 50).map((f, i) => (
+              <li key={i}>
+                {(f as any).webkitRelativePath || f.name}
+              </li>
+            ))}
+            {fileList.length > 50 && (
+              <li className="italic">...and {fileList.length - 50} more</li>
+            )}
+          </ul>
+        </details>
+      )}
 
       <button
         onClick={handleUpload}
@@ -90,7 +148,15 @@ function UploadPanel() {
         <ul className="mt-6 space-y-2 text-sm">
           {results.map((r, i) => (
             <li key={i} className="rounded-md border border-black/10 bg-paper px-3 py-2">
-              {r.filename} — {r.error ? `Error: ${r.error}` : `Queued (${r.status})`}
+              <span className="font-medium">{r.filename}</span>
+              {r.folderPath && (
+                <span className="ml-2 rounded bg-black/5 px-1.5 py-0.5 text-xs text-black/50">
+                  {r.folderPath}
+                </span>
+              )}
+              <span className="ml-2">
+                {r.error ? `Error: ${r.error}` : `✅ Queued`}
+              </span>
             </li>
           ))}
         </ul>

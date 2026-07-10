@@ -13,6 +13,7 @@ export type FileStatus = "Queue" | "Assigned" | "Completed";
 export interface LeadFile {
   fileId: string;
   filename: string;
+  folderPath: string;
   status: FileStatus;
   assignedTo: string;
   uploadedAt: string;

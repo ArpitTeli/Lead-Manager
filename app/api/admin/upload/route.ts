@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { uploadFile } from "@/lib/drive";
+import { uploadFile, ensureFolder } from "@/lib/drive";
 import { createFile } from "@/lib/sheets/files";
 import { logActivity } from "@/lib/logger";
+
+// Increase timeout for larger uploads on Vercel
+export const maxDuration = 30;
 
 const EXCEL_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -24,6 +27,9 @@ export async function POST(req: NextRequest) {
     }
 
     const results = [];
+    // Track created subfolders so we don't re-query Drive for every file
+    const folderCache = new Map<string, string>();
+
     for (const file of files) {
       if (!EXCEL_MIME_TYPES.includes(file.type) && !file.name.match(/\.xlsx?$/i)) {
         results.push({ filename: file.name, error: "Not an Excel file" });
@@ -31,16 +37,38 @@ export async function POST(req: NextRequest) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
+
+      // Determine folder path from webkitRelativePath (folder upload)
+      const relativePath = (file as any).webkitRelativePath || "";
+      const pathParts = relativePath.split("/");
+      // pathParts = ["topFolder", "subfolder", ..., "file.xlsx"]
+      // Last part is the filename; everything before is the folder path
+      let folderPath = "";
+      let parentFolderId: string | undefined;
+
+      if (pathParts.length > 1) {
+        // Extract the folder path (everything except the filename)
+        folderPath = pathParts.slice(0, -1).join("/");
+
+        if (!folderCache.has(folderPath)) {
+          const folderId = await ensureFolder(folderPath);
+          folderCache.set(folderPath, folderId);
+        }
+        parentFolderId = folderCache.get(folderPath);
+      }
+
       const driveFileId = await uploadFile(
         file.name,
         buffer,
-        file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        parentFolderId
       );
 
       const now = new Date().toISOString();
       await createFile({
         fileId: driveFileId,
         filename: file.name,
+        folderPath,
         status: "Queue",
         assignedTo: "",
         uploadedAt: now,
@@ -49,12 +77,18 @@ export async function POST(req: NextRequest) {
       });
 
       await logActivity(session.userId, "UPLOADED", `File ${file.name} (${driveFileId})`);
-      results.push({ filename: file.name, fileId: driveFileId, status: "Queue" });
+      results.push({
+        filename: file.name,
+        folderPath,
+        fileId: driveFileId,
+        status: "Queue",
+      });
     }
 
     return NextResponse.json({ results });
-  } catch (err) {
+  } catch (err: any) {
     console.error("upload error:", err);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    const message = err?.message || err?.toString() || "Upload failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
