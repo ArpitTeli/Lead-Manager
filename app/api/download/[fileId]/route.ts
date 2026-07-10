@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { getFileById } from "@/lib/sheets/files";
-import { downloadFile } from "@/lib/drive";
+import { getFileById, deleteFileRecord } from "@/lib/sheets/files";
+import { downloadFile, deleteFile } from "@/lib/drive";
 import { logActivity } from "@/lib/logger";
 
 export async function GET(
@@ -23,7 +23,18 @@ export async function GET(
   try {
     // storageUrl may be empty for files uploaded before the column was added
     const storageUrl = file.storageUrl || file.fileId;
+
+    // Download the file into memory first
     const buffer = await downloadFile(storageUrl);
+
+    // Delete from blob storage and Sheet immediately (one-time download)
+    await deleteFile(storageUrl).catch((e) =>
+      console.error("Failed to delete from storage:", e)
+    );
+    await deleteFileRecord(fileId).catch((e) =>
+      console.error("Failed to delete from Sheet:", e)
+    );
+
     await logActivity(session.userId, "DOWNLOADED", `File ${file.filename} (${fileId})`);
 
     return new NextResponse(buffer, {
