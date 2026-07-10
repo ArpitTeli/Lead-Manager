@@ -31,7 +31,7 @@ function rowToFile(row: Record<string, any>): LeadFile & { _row: number } {
 
 export async function getAllFiles() {
   const rows = await readTab(TAB);
-  return rows.map(rowToFile);
+  return rows.map(rowToFile).filter((f) => f.filename !== "");
 }
 
 export async function getFileById(fileId: string) {
@@ -68,6 +68,14 @@ export async function updateFile(fileId: string, patch: Partial<LeadFile>) {
     AssignedAt: merged.assignedAt,
     CompletedAt: merged.completedAt,
   });
+}
+
+export async function deleteFileRecord(fileId: string) {
+  const file = await getFileById(fileId);
+  if (!file) throw new Error("File not found");
+  // Clear the row instead of deleting it (avoids needing numeric sheetId)
+  const empty = Object.fromEntries(HEADERS.map((h) => [h, ""]));
+  await updateRow(TAB, (file as any)._row, HEADERS, empty);
 }
 
 /** Oldest file still in Queue, ordered by UploadedAt ascending. */

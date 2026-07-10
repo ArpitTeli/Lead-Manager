@@ -247,6 +247,21 @@ function FilesPanel() {
 
   useEffect(() => { loadFiles(); }, []);
 
+  async function handleDelete(fileId: string, filename: string) {
+    if (!window.confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+    const res = await fetch("/api/admin/files", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileId }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || "Failed to delete");
+    } else {
+      loadFiles();
+    }
+  }
+
   if (loading) return <p className="text-sm text-black/50">Loading...</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
 
@@ -292,13 +307,19 @@ function FilesPanel() {
                   <td className="py-2 pr-2 text-xs text-black/50">
                     {new Date(f.uploadedAt).toLocaleDateString()}
                   </td>
-                  <td className="py-2">
+                  <td className="py-2 flex gap-1.5">
                     <a
                       href={`/api/download/${f.fileId}`}
                       className="rounded-md border border-black/15 px-2.5 py-1 text-xs hover:bg-black/5"
                     >
                       Download
                     </a>
+                    <button
+                      onClick={() => handleDelete(f.fileId, f.filename)}
+                      className="rounded-md border border-red-200 px-2.5 py-1 text-xs text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
