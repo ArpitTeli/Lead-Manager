@@ -1,84 +1,91 @@
-import { getDriveClient } from "@/lib/google";
-import { Readable } from "stream";
+import { put, del } from "@vercel/blob";
+import { writeFile, readFile, unlink, mkdir } from "fs/promises";
+import path from "path";
+import { nanoid } from "nanoid";
 
-const ROOT_FOLDER_ID = () => process.env.GOOGLE_DRIVE_FOLDER_ID as string;
+const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
-export async function uploadFile(
-  filename: string,
-  buffer: Buffer,
-  mimeType: string,
-  parentFolderId?: string
-) {
-  const drive = getDriveClient();
-  const res = await drive.files.create({
-    requestBody: {
-      name: filename,
-      parents: [parentFolderId || ROOT_FOLDER_ID()],
-    },
-    media: {
-      mimeType,
-      body: Readable.from(buffer),
-    },
-    fields: "id, name",
-    supportsAllDrives: true,
-  });
-  return res.data.id as string;
+function isVercel(): boolean {
+  return !!process.env.VERCEL || !!process.env.BLOB_READ_WRITE_TOKEN;
 }
 
 /**
- * Ensures a folder path exists under rootFolder, creating any missing
- * subfolders along the way. Returns the Drive folder ID of the deepest
- * subfolder.
- *
- * e.g. ensureFolder("Region A/City 1") creates
- *   ROOT/Region A/ -> ROOT/Region A/City 1/
- * and returns the ID of "City 1".
+ * Upload a file. Returns a unique file identifier.
+ * - On Vercel: returns the blob URL
+ * - On local: returns a unique filename (with nanoid prefix)
  */
-export async function ensureFolder(folderPath: string): Promise<string> {
-  const drive = getDriveClient();
-  const parts = folderPath.split("/").filter(Boolean);
-  let parentId = ROOT_FOLDER_ID();
-
-  for (const part of parts) {
-    // Search for an existing folder with this name under the current parent
-    const search = await drive.files.list({
-      q: `name = '${part.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      fields: "files(id, name)",
-      pageSize: 1,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    if (search.data.files && search.data.files.length > 0) {
-      parentId = search.data.files[0].id!;
-    } else {
-      // Create the folder
-      const created = await drive.files.create({
-        requestBody: {
-          name: part,
-          mimeType: "application/vnd.google-apps.folder",
-          parents: [parentId],
-        },
-        fields: "id",
-        supportsAllDrives: true,
-      });
-      parentId = created.data.id!;
-    }
+export async function uploadFile(
+  storageName: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<string> {
+  // Sanitize: prevent path traversal
+  if (storageName.includes("..")) {
+    throw new Error("Invalid filename");
   }
 
-  return parentId;
+  if (isVercel()) {
+    const blob = await put(storageName, buffer, {
+      access: "public",
+      contentType: mimeType,
+      addRandomSuffix: true,
+    });
+    return blob.url;
+  }
+
+  // Local dev: store on disk
+  await mkdir(UPLOADS_DIR, { recursive: true });
+
+  // For folder uploads (path contains "/"), preserve directory structure
+  const dir = path.dirname(storageName);
+  if (dir !== ".") {
+    await mkdir(path.join(UPLOADS_DIR, dir), { recursive: true });
+  }
+
+  const uniqueName = dir !== "."
+    ? path.join(dir, `${nanoid(12)}-${path.basename(storageName)}`)
+    : `${nanoid(12)}-${storageName}`;
+
+  const filePath = path.join(UPLOADS_DIR, uniqueName);
+  await writeFile(filePath, buffer);
+  return uniqueName;
 }
 
-export async function downloadFile(driveFileId: string): Promise<Buffer> {
-  const drive = getDriveClient();
-  const res = await drive.files.get(
-    { fileId: driveFileId, alt: "media", supportsAllDrives: true },
-    { responseType: "arraybuffer" }
-  );
-  return Buffer.from(res.data as ArrayBuffer);
+/**
+ * Download a file by its identifier.
+ * - On Vercel: fileId is a blob URL, fetches it
+ * - On local: fileId is a relative path in uploads/
+ */
+export async function downloadFile(fileId: string): Promise<Buffer> {
+  if (isVercel() || fileId.startsWith("http")) {
+    const res = await fetch(fileId);
+    if (!res.ok) throw new Error("File not found");
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  // Local dev: read from disk
+  const filePath = path.join(UPLOADS_DIR, fileId);
+  return readFile(filePath);
 }
 
-export async function deleteFile(driveFileId: string) {
-  const drive = getDriveClient();
-  await drive.files.delete({ fileId: driveFileId, supportsAllDrives: true });
+export async function deleteFile(fileId: string) {
+  if (isVercel()) {
+    await del(fileId);
+    return;
+  }
+
+  // Local dev: delete from disk
+  const filePath = path.join(UPLOADS_DIR, fileId);
+  await unlink(filePath).catch((err) => console.error("Failed to delete file:", filePath, err));
+}
+
+/**
+ * Creates local directory structure for folder uploads.
+ * No-op on Vercel (blob is flat with prefix-based paths).
+ */
+export async function ensureFolder(folderPath: string): Promise<void> {
+  if (!isVercel()) {
+    const dir = path.join(UPLOADS_DIR, folderPath);
+    await mkdir(dir, { recursive: true });
+  }
 }

@@ -27,8 +27,6 @@ export async function POST(req: NextRequest) {
     }
 
     const results = [];
-    // Track created subfolders so we don't re-query Drive for every file
-    const folderCache = new Map<string, string>();
 
     for (const file of files) {
       if (!EXCEL_MIME_TYPES.includes(file.type) && !file.name.match(/\.xlsx?$/i)) {
@@ -44,29 +42,29 @@ export async function POST(req: NextRequest) {
       // pathParts = ["topFolder", "subfolder", ..., "file.xlsx"]
       // Last part is the filename; everything before is the folder path
       let folderPath = "";
-      let parentFolderId: string | undefined;
+      let storageName = file.name;
 
       if (pathParts.length > 1) {
         // Extract the folder path (everything except the filename)
         folderPath = pathParts.slice(0, -1).join("/");
-
-        if (!folderCache.has(folderPath)) {
-          const folderId = await ensureFolder(folderPath);
-          folderCache.set(folderPath, folderId);
-        }
-        parentFolderId = folderCache.get(folderPath);
+        // Use the full relative path to preserve folder structure in storage
+        storageName = relativePath;
       }
 
-      const driveFileId = await uploadFile(
-        file.name,
+      // Ensure local folder exists (no-op on Vercel Blob)
+      if (folderPath) {
+        await ensureFolder(folderPath);
+      }
+
+      const fileId = await uploadFile(
+        storageName,
         buffer,
-        file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        parentFolderId
+        file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       );
 
       const now = new Date().toISOString();
       await createFile({
-        fileId: driveFileId,
+        fileId,
         filename: file.name,
         folderPath,
         status: "Queue",
@@ -76,11 +74,11 @@ export async function POST(req: NextRequest) {
         completedAt: "",
       });
 
-      await logActivity(session.userId, "UPLOADED", `File ${file.name} (${driveFileId})`);
+      await logActivity(session.userId, "UPLOADED", `File ${file.name} (${fileId})`);
       results.push({
         filename: file.name,
         folderPath,
-        fileId: driveFileId,
+        fileId,
         status: "Queue",
       });
     }
